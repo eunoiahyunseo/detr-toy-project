@@ -52,31 +52,8 @@ THe used dataset (`leftImg8but_trainvaltest` with `gtFine` labels) consist in an
 
 #### [panoptic segmentation COCO format](https://cocodataset.org/#format-data)
 
-```json
-annotation {
-    "image_id": int,
-    "file_name": str,
-    "segments_info": [segment_info],
-}
+<img src="./images/cocodataformat.jpeg" >
 
-segment_info {
-    "id": int,
-    "category_id": int,
-    "area": int,
-    "bbox": [x,y,width,height],
-    "iscrowd": 0 or 1,
-}
-
-categories [{
-    "id": int,
-    "name": str,
-    "supercategory": str,
-    "isthing": 0 or 1,
-    "color": [R,G,B],
-}]
-```
-
-In particular the COCO format for panoptic segmentation consist in a PNG that stores the 
 
 <br>
 
