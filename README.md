@@ -1,80 +1,233 @@
+### DETR with panoptic segmentation Report
 
-## DETR
+​																																				2021113490 이현서
 
-DETR은 Object Detection의 SOTA모델에 대부분에 적용되는 아키텍쳐이다.
+### Referential Links
 
-Object Detection을 넘어서 위 레포에 d2(=detectron2)를 Wrapping 해놓았다. <br/>
-이를 통해서 Panoptic Segmentation을 진행할 수 있다.
+---
 
+[fair github libk](https://github.com/facebookresearch/detr)
 
-### 수행한 작업
-* 레포에 있는, hands_on, detection, panoptic-segmentation standalone colab을 돌려보면서 DETR 아키텍쳐 동작 원리 파악
-  * 여기서는 모델을 simplify해서 pre-trained된 모델에 대해 이미지를 검증해보는 작업을 시도해볼 수 있었음
-  * 그래고 attention-map을 시각화 하는 작업을 통해서 encoder-decoder에서의 abliation study를 하며 이들을 가시화 할 수 있었음
-* 실제 논문 환경으로 구축된 아키텍쳐에 학습을 하려면 Transfer-Running을 해야하지만 Issue에서 이가 잘 동작하는지에 대해서는 검증하지 못했다고 되어있음
-  * 그래도 아마 잘 동작될 것으로 예상해서, (우선 Detection 먼저) Custom face dataset을 coco format으로 바꿈
-* 이제 해당 face dataset을 git 레포에 있던 DETR-DC5 model을 통해 train 가중치를 초기화 시켜주었음
-  * 하지만 논문에서도 나와있었지만, 1epoch에 40분정도가 걸려 최소 200은 넘게 돌려야한다는데, 이를 할 컴퓨팅 파워가 되지 못하였음
-  * 심지어 mac 환경에서 돌려야 했는데, gpu가 있는 서버가 없어서 이를 1batch만을 학습하는데에도 10분이 걸렸음,,, (불가능)
-  * 아마 이렇게 전이학습을 통해 모델을 fine-tunning하게 되면, bounding box를 잘 찾을 것으로 예상.
-  * 그리고 실제로 코드의 많은 부분을 수정해야 하는데, 이는 datasets/face.py에 수정한 버전을 올려두었음
-      * face를 fine-tunning할떄에는 class가 얼굴 1개여서 이에 대한 detr.py도 수정해야하고,, 텐서 차원도 수정해야 하고,, --num_queries=100(=default)에서 좀 줄여주어야 함(10?)
-* 그래서 그냥 pre-trained된 모델에 위에 hands-on 파일을 참조하여 detection 결과와 attention-matrix들을 encoder, decoder에서 찍어보는 작업만 일단 진행함.
-  * 잘 동작하는듯
-* panoptic-segmentation도 시간이 부족해서 해보진 않았지만, 아마 Detection이 잘 동작하니까 Detectron2를 활용하면 colab에서 봤던것과 같이 잘 돌아갈듯.
+[panoptic segmentation arxiv](https://arxiv.org/pdf/1801.00868.pdf)
+
+[detr paper](https://arxiv.org/pdf/2005.12872.pdf)
+
+[fair-DETR finetune for pretrained coco model on the cityscape dataset for panoptic segmentation](https://github.com/DanieleVeri/fair-DETR)
+
+[cityscapesScripts](https://github.com/mcordts/cityscapesScripts)
+
+[panopticapi](https://github.com/cocodataset/panopticapi)
 
 
-## .vscode/launch.json
+
+### 1. Environment setup
+
+> 환경설정 하는데 중요한 정보 정리
+
+---
+
+DETR repo contains `model`, `dataset`, and `uils` 
+
+this model package provides implementation of the DETR + mask head fo `panoptic segmentation`
+
+the dataset package takes care to load and parse the COCO dataset and perform data augmentation
+
+utils package implements miscellaneous functionalities (e.g. distributed environment)
+
+
+
+### 2. Dataset
+
+> cityscapeScripts에서 clone -> Panoptic segmentation에 맞게 Parsing해야함
+
+---
+
+ityscapesScripts is used to download the Cityscape dataset and convert it to the COCO format.
+
+THe used dataset (`leftImg8but_trainvaltest` with `gtFine` labels) consist in an archive of 5000 images where about 3000 make the train set, 500 the validation set and 1500 the test set (unused).
+
+
+
+#### [panoptic segmentation COCO format](https://cocodataset.org/#format-data)
+
 ```json
-{
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "main.py",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "args": ["--batch_size", "2",
-                "--no_aux_loss",
-                "--eval",
-                "--device",
-                "cpu", 
-                "--dataset_file", "face", 
-                "--data_path", "./workspace/custom/dataset/", 
-                "--resume", "https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth"]
-        },
-        {
-            "name": "test.py",
-            "type": "python",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "justMyCode": false,
-            "args": [
-                "--device", "cpu",
-                "--data_path", "./workspace/custom/dataset/coco_test/",
-                "--dataset_file", "coco",
-                "--resume", "weights/detr-r50-e632da11.pth"
-            ]
-        }
-    ]
+annotation{
+	"image_id": int,
+  "file_name": str,
+  "segments_info": [segment_info],
 }
+
+segment_info{
+	"id": int,
+  "category_id": int,
+  "area": int,
+  "bbox": [x,y,width,height],
+  "iscrowd": 0 or 1,
+}
+
+categories[
+  {
+    "id": int,
+    "name": str,
+    "supercategory": str,
+    "isthing": 0 or 1,
+    "color": [R,G,B],
+	}
+]
+```
+
+In particular the COCO format for panoptic segmentation consist in a PNG that stores the 
+
+
+
+1. `class-agnostic image segmentation`
+
+    (이미지 내의 객체를 구변하되, 그 객체가 어떤 클래스에 속하는지는 고려하지 않는 세분화 방법을 말함; 일종의 binary segmentation image라고 볼 수 있음) 
+
+2. `JSON struct`
+
+    stores the semantic information for each image segment.
+
+    the `unique id` of the segment is used to retreive the corresponding mask from the PNG while the 	category_id gives the semantic category.
+
+    `isthing` attribute distinguishes stuff and thing categories (stuff(=흔히 배경) or thing(=구체적인 객체)) 
+
+    Cityscapes script already outpus the PNG. -> not needed list of vertex to mask image
+
+
+
+### 3. Training speedup
+
+> 트레이닝 스피드 높이는법
+
+---
+
+original work was trained for `3 days` using cluster of 16 Tesla V100 GPUs for total of 500 epochs
+
+Profiling the code shows up that the `data augmentation` process that consists in random scaling, flip and cropping consumes most of the time. Assuming that the pretrained model has properly learned a robust image representations this component can be turned off. -> data augmentation을 꺼서 모델의 robust함을 감수하는 대신 시간 효율적이게 동작시킬 수 있다.
+
+batch size is set to 1 to act as a regularizer during the training
+
+
+
+### 4. Transfer learning
+
+---
+
+The starting point is the pretrained model on COCO dataset for panoptic segmentation task with ResNet50 CNN backbone.
+
+> **NOTE:**  the convolutional backbone(=ResNet50) and is fronzen during training. A step in the x-axis correspond to 10 batches
+
+
+
+### 5. Conclusion
+
+---
+
+**First Step** ) `freeze_transformer` --> fine tuning is performed keeping transformer frozen, traning only the classification, bbox and mask heads,
+
+
+
+**Second step** ) `freeze_attention` --> only the attention layers are fronzen. attention method allow a more flexible modeling on the problem as long as many training data points are provided. and Cityscapes is a relatively small dataset
+
+
+
+#### logs in wandb
+
+<img src="./images/wandb-Charts.jpeg">
+
+
+
+#### artifacts
+
+<img src="./images/artifacts.jpeg">
+
+
+
+#### leftImg8bit, gtFine Cityscapes COCO format datasets
+
+[Google drive link](https://drive.google.com/drive/folders/1UlLQpbgX_vz-Pf9Pd4Qh8xEb6jSY6z_L?usp=sharing)
+
+<img src="./images/gtFine.jpeg">
+
+in gtFine folder there is Ground Truth Image file seperated with `valtraintest` and seperated with city name in Eruope
+
+
+
+<img src="./images/gtFine2.jpeg">
+
+and in this folder, there is specific format file for semantic, instance, panoptic segmentation or some detection tasks. including `*gtFine_polygons.json`, `gtFine_labelIds.png`, `*_gtFine_instanceIds.png`, `*_gtFine_color.png`. 
+
+
+
+<img src="./images/gtFine3.jpeg">
+
+with that file I Parse for `COCO2017 data format`. in `gtFine/cityscapes_panoptic_val`, `gtFine/cityscapes_panoptic_train`, `gtFine/cityscapes_panoptic_test`, `gtFine/cityscapes_panoptic_val.json`, `gtFine/cityscapes_panoptic_train.json`, `gtFine/cityscapes_panoptic_test.json`. you can be searched in my [google drive link](https://drive.google.com/drive/folders/1UlLQpbgX_vz-Pf9Pd4Qh8xEb6jSY6z_L?usp=sharing).
+
+
+
+#### DETR_.ipynb
+
+you can find DETR_.ipynb in `/panoptic-segmentation/Cityscapes/DETR_.ipynb`
+
+
+
+i logged acc, loss for `wandb`, plot with `matplotlib`, and panoptic segmentation with `detectron2 wrapper` 
+
+
+
+i loaded model here with artifact in my `knu-primi/detr/2_2_1_transf_unfreeze_aux:v0`
+
+```python
+#@title Load model { form-width: "25%" }
+
+# tine tuning한 artifact를 통해서 test해보자
+
+used_artifact = "knu-prmi/detr/2_2_1_transf_unfreeze_aux:v0"
+artifact = wandb.use_artifact(used_artifact)
+artifact_dir = artifact.download()
+checkpoint = torch.load(artifact_dir+"/checkpoint.pth")
+
+model, criterion, postprocessors = build_model(args)
+model.load_state_dict(checkpoint['model'])
+model.eval();
+
+transform = T.Compose([
+    T.Resize(800),
+    T.ToTensor(),
+    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
 ```
 
 
-## COCO 2017 valk5 Detection Result
 
-![Screenshot 2023-07-28 at 3 19 34 PM](https://github.com/eunoiahyunseo/detr-study/assets/59719629/12cc9dc1-93dd-45ee-a77d-e52c4284b811)
+and Inference here
+
+```pyton
+#@title Inference { form-width: "25%" }
+
+im = Image.open("/content/drive/MyDrive/cityscapes/leftImg8bit/test/munich/munich_000001_000019_leftImg8bit.png")
+img = transform(im).unsqueeze(0)
+out = model(img)
+result = postprocessors['panoptic'](out, torch.as_tensor(img.shape[-2:]).unsqueeze(0))[0]
+```
+
+and `/content/drive/MyDrive/cityscapes/leftImg8bit/test/munich/munich_000001_000019_leftImg8bit.png` test source image is here
 
 
 
-
-## Encoder-Decoder MHA Attention-Map Check
-
-![Screenshot 2023-07-28 at 3 42 00 PM](https://github.com/eunoiahyunseo/detr-study/assets/59719629/74865a8f-5183-4cad-9ea9-cfe4d650749c)
-
-![Screenshot 2023-07-28 at 3 43 00 PM](https://github.com/eunoiahyunseo/detr-study/assets/59719629/ead35d41-b394-4714-a47a-d43143084a5e)
+<img src="./images/munich.jpeg">
 
 
+
+and attention plot is here with decoder-encoder multi-head attention
+
+<img src="./images/attentionmap.jpeg">
+
+
+
+and visualize panoptic-segmentation with detectron2
+
+<img src="./images/panopticseg.jpeg">
+
+you can enjoy with any picture in Cityscapes!

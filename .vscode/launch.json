@@ -1,0 +1,38 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "main.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["--batch_size", "2",
+                "--no_aux_loss",
+                "--eval",
+                "--device",
+                "cpu", 
+                "--dataset_file", "face", 
+                "--data_path", "./workspace/custom/dataset/", 
+                "--resume", "https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth"]
+        },
+        {
+            "name": "test.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--device", "cpu",
+                "--data_path", "./workspace/custom/dataset/coco_test/",
+                "--dataset_file", "coco",
+                "--resume", "weights/detr-r50-e632da11.pth"
+            ]
+        }
+    ]
+}
